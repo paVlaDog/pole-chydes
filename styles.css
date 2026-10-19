@@ -169,6 +169,22 @@ body::after {
   }
 }
 
+.catcher {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  color: transparent;
+  background: transparent;
+  caret-color: transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cell.caret {
     animation: none;

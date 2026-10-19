@@ -1,6 +1,6 @@
 const STORAGE_KEY = "pole-uzhasov-v1";
 const THEME_KEY = "pole-uzhasov-theme";
-const TITLE = "ПОЛЕ УЖАСОВ";
+const TITLE_LINES = ["ТАЙНЫ", "НЕКРОНОМИКОНА"];
 const REVEAL_LABEL = "ОТКРЫТЬ ВСЁ";
 const NEW_GAME_LABEL = "НОВАЯ ИГРА";
 
@@ -60,6 +60,9 @@ let state = loadState() ?? freshState();
 let theme = loadTheme();
 let motifSeed = randomSeed();
 let metricsCache = null;
+let layoutWidth = window.innerWidth;
+let layoutHeight = window.innerHeight;
+let keyHandled = false;
 
 function freshState() {
   return { phrases: ["", "", ""], step: 0, guessed: [], revealed: false };
@@ -152,15 +155,16 @@ function saveTheme() {
 }
 
 function metrics() {
-  const gap = 8;
-  const pad = 18;
-  const availW = window.innerWidth - pad * 2;
-  const availH = window.innerHeight - pad * 2;
-  const minCols = 18;
+  const narrow = layoutWidth < 760;
+  const gap = narrow ? 4 : 8;
+  const pad = narrow ? 8 : 18;
+  const availW = layoutWidth - pad * 2;
+  const availH = layoutHeight - pad * 2;
+  const minCols = narrow ? 14 : 18;
   const cellFromW = Math.floor((availW - gap * (minCols - 1)) / minCols);
-  const rowsGuess = Math.max(11, Math.floor((availH + gap) / (cellFromW + gap)));
+  const rowsGuess = Math.max(11, Math.floor((availH + gap) / (Math.max(cellFromW, 1) + gap)));
   const cellFromH = Math.floor((availH - gap * (rowsGuess - 1)) / rowsGuess);
-  const cell = Math.max(28, Math.min(cellFromW, cellFromH));
+  const cell = Math.max(narrow ? 16 : 28, Math.min(cellFromW, cellFromH));
   const cols = Math.floor((availW + gap) / (cell + gap));
   const rows = Math.floor((availH + gap) / (cell + gap));
   return { cols, rows, cell, gap };
@@ -190,25 +194,73 @@ function randomUnit(seed) {
 }
 
 function decorate(map, cols, rows, wordRows) {
-  const blockedRows = new Set([1, rows - 2, rows - 1, ...wordRows]);
-  const free = [];
+  const blockedRows = new Set([0, 1, rows - 2, rows - 1, ...wordRows]);
+  const bands = [];
   for (let row = 0; row < rows; row += 1) {
     if (blockedRows.has(row)) continue;
+    const openCols = [];
     for (let col = 0; col < cols; col += 1) {
-      if (row === 0 && col === 0) continue;
-      if (!map.has(`${row},${col}`)) free.push([row, col]);
+      if (!map.has(`${row},${col}`)) openCols.push(col);
     }
+    if (openCols.length) bands.push({ row, cols: openCols });
   }
-  let seed = motifSeed >>> 0;
-  for (let index = free.length - 1; index > 0; index -= 1) {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    const swap = Math.floor(randomUnit(seed) * (index + 1));
-    [free[index], free[swap]] = [free[swap], free[index]];
+  const icons = currentTheme().icons;
+  const capacity = bands.reduce((sum, band) => sum + band.cols.length, 0);
+  const count = Math.min(icons.length, capacity);
+  if (!count) return;
+
+  const rng = { seed: motifSeed >>> 0 };
+  const next = () => {
+    rng.seed = (Math.imul(rng.seed, 1664525) + 1013904223) >>> 0;
+    return randomUnit(rng.seed);
+  };
+
+  const quota = bands.map(() => 0);
+  let left = count;
+  let guard = 0;
+  while (left > 0 && guard < count * 3) {
+    const room = bands
+      .map((band, index) => (quota[index] < band.cols.length ? index : -1))
+      .filter((index) => index >= 0);
+    if (!room.length) break;
+    const fewest = Math.min(...room.map((index) => quota[index]));
+    const choices = room.filter((index) => quota[index] === fewest);
+    quota[choices[Math.floor(next() * choices.length)]] += 1;
+    left -= 1;
+    guard += 1;
   }
-  currentTheme().icons.forEach((markup, index) => {
-    const slot = free[index];
-    if (!slot) return;
-    map.set(`${slot[0]},${slot[1]}`, { kind: "empty", icon: markup });
+
+  const stagger = next() < 0.5 ? 0 : 1;
+  const spots = [];
+  bands.forEach((band, bandIndex) => {
+    const need = quota[bandIndex];
+    if (!need) return;
+    const taken = new Set();
+    const bias = (bandIndex + stagger) % 2 === 0 ? 0.28 : 0.72;
+    for (let piece = 0; piece < need; piece += 1) {
+      const center = (piece + bias) / need;
+      const jitter = (next() - 0.5) * 0.36 / need;
+      const target = Math.min(0.999, Math.max(0, center + jitter));
+      const origin = Math.round(target * (band.cols.length - 1));
+      let index = origin;
+      let hop = 0;
+      while (taken.has(index) && hop < band.cols.length) {
+        hop += 1;
+        const delta = hop % 2 === 0 ? hop / 2 : -Math.ceil(hop / 2);
+        index = Math.min(band.cols.length - 1, Math.max(0, origin + delta));
+      }
+      taken.add(index);
+      spots.push([band.row, band.cols[index]]);
+    }
+  });
+
+  const order = icons.slice(0, spots.length);
+  for (let index = order.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(next() * (index + 1));
+    [order[index], order[swap]] = [order[swap], order[index]];
+  }
+  spots.forEach((slot, index) => {
+    map.set(`${slot[0]},${slot[1]}`, { kind: "empty", icon: order[index] });
   });
 }
 
@@ -242,10 +294,14 @@ function render() {
   const actionLabel = finished ? NEW_GAME_LABEL : REVEAL_LABEL;
   const actionStart = Math.max(0, Math.floor((cols - actionLabel.length) / 2));
 
-  const titleStart = Math.max(0, Math.floor((cols - TITLE.length) / 2));
-  [...TITLE].forEach((char, index) => {
-    if (char === " ") return;
-    map.set(`1,${titleStart + index}`, { kind: "title", char });
+  TITLE_LINES.forEach((line, row) => {
+    let start = Math.max(0, Math.floor((cols - line.length) / 2));
+    if (row === 0 && start === 0 && line.length < cols) start = 1;
+    [...line].forEach((char, index) => {
+      const col = start + index;
+      if (col < 0 || col >= cols || (row === 0 && col === 0)) return;
+      map.set(`${row},${col}`, { kind: "title", char });
+    });
   });
 
   for (let index = 0; index < 3; index += 1) {
@@ -384,6 +440,18 @@ function cycleTheme() {
   render();
 }
 
+function markKeyHandled() {
+  keyHandled = true;
+  setTimeout(() => {
+    keyHandled = false;
+  }, 0);
+}
+
+function applyChar(char) {
+  if (state.step < 3) typeChar(char);
+  else if (isLetter(char)) guess(char);
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Backspace" && event.ctrlKey && event.shiftKey) {
     event.preventDefault();
@@ -396,24 +464,61 @@ document.addEventListener("keydown", (event) => {
   if (state.step < 3) {
     if (event.key === "Enter") {
       event.preventDefault();
+      markKeyHandled();
       commit();
       return;
     }
     if (event.key === "Backspace") {
       event.preventDefault();
+      markKeyHandled();
       backspace();
       return;
     }
     if ([...event.key].length !== 1) return;
     event.preventDefault();
+    markKeyHandled();
     typeChar(event.key);
     return;
   }
 
   if ([...event.key].length === 1 && isLetter(event.key)) {
     event.preventDefault();
+    markKeyHandled();
     guess(event.key);
   }
+});
+
+const catcher = document.querySelector("#catcher");
+
+function focusCatcher(event) {
+  if (event.target.closest(".style-hit, .reveal-hit")) return;
+  catcher.focus({ preventScroll: true });
+}
+
+board.addEventListener("pointerdown", focusCatcher);
+
+catcher.addEventListener("beforeinput", (event) => {
+  if (keyHandled) return;
+  if (event.inputType === "deleteContentBackward") {
+    event.preventDefault();
+    if (state.step < 3) backspace();
+    return;
+  }
+  if (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") {
+    event.preventDefault();
+    if (state.step < 3) commit();
+  }
+});
+
+catcher.addEventListener("input", () => {
+  if (keyHandled) {
+    keyHandled = false;
+    catcher.value = "";
+    return;
+  }
+  const chars = [...catcher.value].filter((char) => char !== "\n" && char !== "\r");
+  catcher.value = "";
+  chars.forEach(applyChar);
 });
 
 board.addEventListener("click", (event) => {
@@ -421,11 +526,26 @@ board.addEventListener("click", (event) => {
     cycleTheme();
     return;
   }
-  if (!event.target.closest(".reveal-hit")) return;
-  if (allLettersOpen()) resetGame();
-  else revealAll();
+  if (event.target.closest(".reveal-hit")) {
+    if (allLettersOpen()) resetGame();
+    else revealAll();
+    return;
+  }
+  focusCatcher(event);
 });
 
-window.addEventListener("resize", () => render());
+function onViewportChange() {
+  const width = window.innerWidth;
+  const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const widthChanged = Math.abs(width - layoutWidth) > 20;
+  const keyboard = layoutHeight - height > 120;
+  if (!widthChanged && keyboard) return;
+  layoutWidth = width;
+  layoutHeight = window.innerHeight;
+  render();
+}
+
+window.addEventListener("resize", onViewportChange);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", onViewportChange);
 
 render();
