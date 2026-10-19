@@ -3,55 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Поле чудес</title>
+  <title>Поле ужасов</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body translate="no">
-  <div class="stage">
-    <header class="top">
-      <p class="eyebrow">Табло ведущего</p>
-      <h1>Поле чудес</h1>
-    </header>
-
-    <section id="setup" class="panel">
-      <form id="setup-form">
-        <p class="lead">Введите три слова или словосочетания. После старта на экране останутся только клетки.</p>
-        <label>
-          <span>Первая строка</span>
-          <input name="phrase" maxlength="80" autocomplete="off" spellcheck="false" placeholder="КОСМИЧЕСКИЙ КОРАБЛЬ">
-        </label>
-        <label>
-          <span>Вторая строка</span>
-          <input name="phrase" maxlength="80" autocomplete="off" spellcheck="false" placeholder="МЛЕЧНЫЙ ПУТЬ">
-        </label>
-        <label>
-          <span>Третья строка</span>
-          <input name="phrase" maxlength="80" autocomplete="off" spellcheck="false" placeholder="ПОЛЯРНАЯ ЗВЕЗДА">
-        </label>
-        <p id="setup-error" class="error" hidden>Заполните все три строки.</p>
-        <button type="submit" class="primary">Начать</button>
-      </form>
-    </section>
-
-    <section id="play" class="play" hidden>
-      <div id="phrases" class="phrases" aria-live="polite"></div>
-
-      <form id="guess-form" class="guess">
-        <label>
-          <span>Буква</span>
-          <input id="guess" maxlength="1" autocomplete="off" spellcheck="false" autocapitalize="characters" inputmode="text" aria-describedby="status">
-        </label>
-        <p id="status" class="status">Нажмите букву на клавиатуре</p>
-      </form>
-
-      <div class="guessed-block">
-        <p class="guessed-label">Названные буквы</p>
-        <div id="guessed" class="guessed"></div>
-      </div>
-
-      <button id="reset" type="button" class="ghost">Новая игра</button>
-    </section>
-  </div>
+  <main id="board" class="board"></main>
   <script src="app.js"></script>
 </body>
 </html>
